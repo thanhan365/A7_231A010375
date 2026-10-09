@@ -16,6 +16,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import android.app.PendingIntent;
+
 import androidx.activity.EdgeToEdge;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -31,13 +33,14 @@ import androidx.core.view.WindowInsetsCompat;
 public class MainActivity extends AppCompatActivity {
 
     // TODO: thay 2201234567 bằng MSSV của bạn
-    private static final String TAG = "A7_2201234567";
+    private static final String TAG = "A7_231A010375";
 
     private static final String CHANNEL_ID = "a7_channel";
     private static final int NOTI_ID = 1001;
 
     private ImageView imgAnh;
     private TextView tvTrangThai;
+    private String thongTinAnh = "";
 
     // ---------------------------------------------------------------
     // 1) Bộ xin quyền CAMERA.
@@ -77,11 +80,36 @@ public class MainActivity extends AppCompatActivity {
             (Bitmap bitmap) -> {
                 if (bitmap != null) {
                     imgAnh.setImageBitmap(bitmap);
-                    tvTrangThai.setText(getString(R.string.status_photo,
-                            bitmap.getWidth(), bitmap.getHeight()));
+                    thongTinAnh = getString(R.string.status_photo,
+                            bitmap.getWidth(), bitmap.getHeight());
+                    capNhatTrangThai();
                 } else {
                     Toast.makeText(this, R.string.photo_cancelled, Toast.LENGTH_SHORT).show();
                 }
+            });
+
+    // 3) Bộ mở Camera lấy ảnh xem trước (bitmap thu nhỏ, không cần lưu file)
+    // NC1: xin nhiều quyền cùng lúc, callback nhận Map<tên quyền, được cấp?>
+    private final ActivityResultLauncher<String[]> xinNhieuQuyen = registerForActivityResult(
+            new ActivityResultContracts.RequestMultiplePermissions(),
+            (java.util.Map<String, Boolean> ketQua) -> {
+                for (java.util.Map.Entry<String, Boolean> e : ketQua.entrySet()) {
+                    Log.d(TAG, e.getKey() + " = " + e.getValue());
+                }
+
+                Boolean cam = ketQua.get(Manifest.permission.CAMERA);
+                if (Boolean.TRUE.equals(cam)) {
+                    Toast.makeText(this, "CAMERA: được cấp", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, "CAMERA: bị từ chối", Toast.LENGTH_SHORT).show();
+                }
+
+                Boolean tb = ketQua.get(Manifest.permission.POST_NOTIFICATIONS);
+                if (tb != null && !tb) {
+                    Toast.makeText(this, R.string.noti_denied, Toast.LENGTH_SHORT).show();
+                }
+
+                capNhatTrangThai();
             });
 
     @Override
@@ -106,7 +134,18 @@ public class MainActivity extends AppCompatActivity {
         btnChupAnh.setOnClickListener(v -> kiemTraRoiChup());
         btnThongBao.setOnClickListener(v -> kiemTraRoiGuiThongBao());
         btnCaiDat.setOnClickListener(v -> moCaiDatUngDung());
+
+
+        Button btnXinCaHai = findViewById(R.id.btnXinCaHai);
+        btnXinCaHai.setOnClickListener(v->{
+                String[] ds = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                ? new String[]{Manifest.permission.CAMERA, Manifest.permission.POST_NOTIFICATIONS}
+                : new String[]{Manifest.permission.CAMERA};
+        xinNhieuQuyen.launch(ds);
+    });
+
     }
+
 
     @Override
     protected void onResume() {
@@ -190,11 +229,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void guiThongBao() {
+        // NC3: bấm vào thông báo thì mở lại MainActivity
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        PendingIntent pi = PendingIntent.getActivity(
+                this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+
         NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle(getString(R.string.noti_title))
                 .setContentText(getString(R.string.noti_text))
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setContentIntent(pi)
                 .setAutoCancel(true);
         try {
             NotificationManagerCompat.from(this).notify(NOTI_ID, b.build());
@@ -215,6 +261,9 @@ public class MainActivity extends AppCompatActivity {
         String s = getString(R.string.status_format,
                 camera ? getString(R.string.granted) : getString(R.string.denied),
                 thongBao ? getString(R.string.granted) : getString(R.string.denied));
+        if (!thongTinAnh.isEmpty()) {
+            s = thongTinAnh + "\n\n" + s;
+        }
         tvTrangThai.setText(s);
         Log.d(TAG, s.replace("\n", " | "));
     }
